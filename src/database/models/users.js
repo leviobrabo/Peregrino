@@ -22,6 +22,8 @@ const userSchema = new Schema({
   diasdeestudo: { type: Number, required: true, min: 0, max: 1000000 },
   receivedPlusOne: { type: Boolean, required: true, default: false },
   last_interaction: { type: String, required: false },
+  dataCadastro: { type: Date, default: Date.now },
+  tipsDiaEnviado: { type: [Number], default: [] },
   translation: { type: String, required: true, enum: ["aa", "acf", "ara", "arc", "as21", "jfaa", "kja", "kjf", "naa", "nbv", "ntlh", "nvi", "nvt", "tb"], default: "acf" }
 });
 

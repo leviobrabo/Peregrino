@@ -558,6 +558,46 @@ bot.onText(/^(\/broadcast|\/bc)\b/, async (msg, match) => {
   );
 });
 
+// NOVIDADES — broadcast formatado de atualizações do bot
+
+bot.onText(/^\/novidades\b/, async (msg) => {
+  const userId = msg.from.id;
+  if (!(await is_dev(userId))) return;
+  if (msg.chat.type !== "private") return;
+
+  const novidades = `🆕 <b>Novidades do Peregrino</b>\n\n` +
+    `📚 <b>4 novos planos de leitura:</b>\n` +
+    `• /planosalmos — 30 Dias nos Salmos\n` +
+    `• /planoproverbios — 30 Dias em Provérbios\n` +
+    `• /planoidemcristo — Identidade em Cristo (7d)\n` +
+    `• /planoansiedade — Ansiedade e Fé (7d)\n\n` +
+    `📖 <b>Pesquisa inline:</b> Você pode pesquisar qualquer versículo diretamente em qualquer conversa digitando <code>@operegrino_bot</code> seguido da referência.\n\n` +
+    `🙏 <b>Lembrete de oração:</b> Configure um horário personalizado com /horariooracao\n\n` +
+    `📝 <b>Anotações bíblicas:</b> Guarde reflexões com /addanotacao\n\n` +
+    `🏅 <b>Sistema de ranks:</b> Acumule dias de estudo e suba de Iniciante até Teológo. Veja seu progresso em /status\n\n` +
+    `Use /plano para ver todos os 17 planos disponíveis.`;
+
+  const sentMsg = await bot.sendMessage(msg.chat.id, "<i>Enviando novidades...</i>", { parse_mode: "HTML" });
+  const ulist = await UserModel.find().lean().select("user_id");
+  let ok = 0, blocked = 0, fail = 0;
+  for (const { user_id } of ulist) {
+    try {
+      await bot.sendMessage(user_id, novidades, { parse_mode: "HTML", disable_web_page_preview: true });
+      ok++;
+    } catch (err) {
+      if (err.response && err.response.body && err.response.body.error_code === 403) {
+        blocked++;
+      } else {
+        fail++;
+      }
+    }
+  }
+  await bot.editMessageText(
+    `╭─❑ 「 <b>Novidades Enviadas</b> 」 ❑─\n│ Total: ${ulist.length}\n│ Enviado: ${ok}\n│ Bloqueado: ${blocked}\n│ Falha: ${fail}\n╰❑`,
+    { chat_id: sentMsg.chat.id, message_id: sentMsg.message_id, parse_mode: "HTML" }
+  );
+});
+
 // BAN UNBAN E LISTA BAN (GRUPOS)
 
 bot.onText(/\/ban/, async (message) => {
@@ -2384,50 +2424,56 @@ bot.on("callback_query", async (query) => {
         ],
       },
     });
+  } else if (data === "ver_planos") {
+    const msgplano = `<b>17 planos disponíveis</b>\n\n` +
+      `📗 /planotransformado — Seja Transformado (3d)\n` +
+      `📗 /planosabedoriadnv — Sabedoria Divina (5d)\n` +
+      `📗 /planont — Novo Testamento (80d)\n` +
+      `📗 /planoop — Orações Perigosas (7d)\n` +
+      `📗 /planobibliatd — Bíblia para Todos (3d)\n` +
+      `📗 /planocsr — Restaurando o Casamento (10d)\n` +
+      `📗 /planolinguagemdoamor — 5 Linguagens do Amor (7d)\n` +
+      `📗 /planonamoroctmp — Namoro Contemporâneo (7d)\n` +
+      `📗 /planoapocalipse — Série Apocalipse (22d)\n` +
+      `📗 /planonamoropb — Namoro Preto no Branco (5d)\n` +
+      `📗 /planocasamento — Curso do Casamento (5d)\n` +
+      `📗 /planodvc — Do Divórcio à Cura (7d)\n` +
+      `📗 /planodevocionais — Crescendo na Fé (6d)\n` +
+      `📗 /planosalmos — 30 Dias nos Salmos (30d)\n` +
+      `📗 /planoproverbios — 30 Dias em Provérbios (30d)\n` +
+      `📗 /planoidemcristo — Identidade em Cristo (7d)\n` +
+      `📗 /planoansiedade — Ansiedade e Fé (7d)\n\n` +
+      `<i>Enviados diariamente às 21h30. Use /cancelarplano para cancelar o ativo.</i>`;
+    await bot.editMessageText(msgplano, {
+      parse_mode: "HTML",
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: { inline_keyboard: [[{ text: "↩️ Voltar", callback_data: "back_to_start" }]] },
+    });
   } else if (data === "back_to_start") {
-    const msgstart = `Olá, <b>${firstName}</b>! \n\nEu sou o bot <b>Peregrino</b>, sou um bot bíblico que está aqui para propagar o evangelho de Deus, e ajudá-los nos estudos diários da bíblia.\n\nAdicione-me em seu grupo para receber as mensagens bíblicas.\n\n<b>Funções:</b> /help <b>[COMECE POR AQUI]</b>\n\n📦<b>Meu código-fonte:</b> <a href="https://github.com/leviobrabo/Peregrino">GitHub</a>`;
+    const msgstart = `Olá, <b>${firstName}</b>! 👋\n\nSou o <b>Peregrino</b> — seu companheiro bíblico diário no Telegram.\n\n<b>O que posso fazer por você:</b>\n📖 Pesquise qualquer versículo: <code>@operegrino_bot João 3:16</code>\n📅 Planos de leitura diários (21h30) — /plano\n🙏 Lembretes de oração personalizados — /horariooracao\n📝 Anotações bíblicas — /addanotacao\n⭐ Versículos diários (8h) — /verson\n🏅 Acompanhe seus dias de estudo — /status\n\nComece por /help para ver tudo disponível.\n\n<i>📦 Código-fonte: <a href="https://github.com/leviobrabo/Peregrino">GitHub</a></i>`;
     const options_start = {
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: {
         inline_keyboard: [
           [
-            {
-              text: "📖 Bíblia",
-              switch_inline_query_current_chat: '',
-            },
+            { text: "📖 Pesquisar versículo", switch_inline_query_current_chat: "" },
           ],
           [
-            {
-              text: "🙏 Pedidos de oração",
-              url: "https://t.me/pedidosdeoracaoperegrino",
-            },
-            {
-              text: "🪪 Minha conta",
-              callback_data: "minha_conta",
-            }
+            { text: "📚 Ver planos de leitura", callback_data: "ver_planos" },
+            { text: "🪪 Minha conta", callback_data: "minha_conta" },
           ],
           [
-            {
-              text: "✨ Adicione-me em seu grupo",
-              url: "https://t.me/operegrino_bot?startgroup=true",
-            },
+            { text: "✨ Adicionar a um grupo", url: "https://t.me/operegrino_bot?startgroup=true" },
           ],
           [
-            {
-              text: "⚙️ Atualizações do bot",
-              url: "https://t.me/peregrinochannel",
-            },
-            {
-              text: "💡 Sobre",
-              callback_data: "edit_caption",
-            },
+            { text: "🙏 Pedidos de oração", url: "https://t.me/pedidosdeoracaoperegrino" },
+            { text: "📍 Canal Oficial", url: "https://t.me/peregrinobr" },
           ],
           [
-            {
-              text: "📍 Canal Oficial",
-              url: "https://t.me/peregrinobr",
-            },
+            { text: "⚙️ Atualizações", url: "https://t.me/peregrinochannel" },
+            { text: "💡 Sobre", callback_data: "edit_caption" },
           ],
         ],
       },
@@ -3371,8 +3417,14 @@ const userVersJob = new CronJob(
   "00 00 08 * * *",
   async function () {
     try {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 45);
       const users = await UserModel.find({ diariavers: true });
       for (const user of users) {
+        if (user.last_interaction) {
+          const lastDate = new Date(user.last_interaction);
+          if (lastDate < cutoff) continue;
+        }
         const userId = user.user_id;
         await getVersiculoUser(userId);
         console.log(`Mensagem enviada com sucesso para o grupo ${userId}`);
@@ -6271,6 +6323,467 @@ const devocionaisJob = new CronJob("00 30 21 * * *", async () => {
 }, null, true, "America/Sao_Paulo");
 
 devocionaisJob.start();
+
+// ─── PLANO 14: 30 DIAS NOS SALMOS ────────────────────────────────────────────
+
+const planoSalmos = require("../plans/salmos30.json");
+
+bot.onText(/\/planosalmos/, async (msg) => {
+  if (msg.chat.type !== "private") return;
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  try {
+    let plano = await PlanoModel.findOne({ user_id: userId });
+    if (!plano) {
+      plano = new PlanoModel({ user_id: userId, diaPlano: 1, planoAtivo: true, plano14: true });
+    } else {
+      if (plano.planoAtivo) {
+        return bot.sendMessage(chatId, "Você já possui um plano ativo. Use /cancelarplano para cancelar antes de iniciar outro.");
+      }
+      plano.plano14 = true;
+      plano.planoAtivo = true;
+      plano.diaPlano = 1;
+      plano.messagePlano = [];
+      plano.messagePositionPlano = 0;
+      plano.messageIdPlano = null;
+    }
+    await plano.save();
+    bot.sendMessage(chatId, "✅ Plano <b>30 Dias nos Salmos</b> iniciado!\n\nVocê receberá o devocional diariamente às 21h30. Prepare o coração para mergulhar nos Salmos.", { parse_mode: "HTML" });
+  } catch (error) {
+    console.error("Erro ao iniciar planosalmos:", error);
+    bot.sendMessage(chatId, "Ocorreu um erro. Tente novamente.");
+  }
+});
+
+async function sendSalmos(plano) {
+  try {
+    const limite = 1000;
+    const dia = plano.diaPlano;
+    const devocional = planoSalmos[dia].devocional[0];
+    const biblia = planoSalmos[dia].biblia[0];
+    const planoText = `<b>${devocional.titulo}</b>\n\n${devocional.versiculo}\n\n${devocional.texto}\n\n<b>${biblia.referencia}</b>\n\n${biblia.texto}`;
+    const mensagemDividida = planoText.split("\n");
+    let mesnsagemArray = [];
+    let arrayPosition = 0;
+    mesnsagemArray[arrayPosition] = "";
+    let messageInfo;
+    if (planoText.length <= limite) {
+      mesnsagemArray[arrayPosition] = planoText;
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
+    } else {
+      for (const frase of mensagemDividida) {
+        if ((mesnsagemArray[arrayPosition].length + frase.length) <= limite) {
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        } else {
+          mesnsagemArray.push("");
+          arrayPosition++;
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        }
+      }
+      const buttonsPlano = [];
+      if (mesnsagemArray.length > 1) buttonsPlano.push({ text: "➡️", callback_data: "next-planosalmos" });
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML", reply_markup: { inline_keyboard: [buttonsPlano] } });
+    }
+    plano.messagePositionPlano = 0;
+    plano.messagePlano = mesnsagemArray;
+    plano.messageIdPlano = messageInfo.message_id;
+    plano.diaPlano++;
+    await plano.save();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function handlePlanCompletionSalmos(plano) {
+  await bot.sendMessage(plano.user_id, "Parabéns! 🎉🙏\n\nVocê concluiu o plano <b>30 Dias nos Salmos</b>!\n\nQue esses 30 dias de louvor e oração tenham aprofundado sua intimidade com Deus. Use /status para ver seus planos concluídos.\n\nEscolha um novo plano com /plano", { parse_mode: "HTML" });
+  await PlanoModel.updateOne({ _id: plano._id }, { $set: { diaPlano: null, messagePositionPlano: 0, messageIdPlano: null, messagePlano: [] } });
+  plano.planoAtivo = false;
+  plano.plano14 = false;
+  plano.planosConcluidos = (plano.planosConcluidos || 0) + 1;
+  await plano.save();
+}
+
+const salmosJob = new CronJob("00 30 21 * * *", async () => {
+  try {
+    const activePlanos = await PlanoModel.find({ plano14: true });
+    for (const plano of activePlanos) {
+      const userId = plano.user_id;
+      if (plano.diaPlano > 30) {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await handlePlanCompletionSalmos(plano);
+      } else {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await sendSalmos(plano);
+      }
+    }
+  } catch (err) {
+    console.error("Erro no salmosJob:", err);
+  }
+}, null, true, "America/Sao_Paulo");
+salmosJob.start();
+
+// ─── PLANO 15: 30 DIAS EM PROVÉRBIOS ─────────────────────────────────────────
+
+const planoProverbios = require("../plans/proverbios30.json");
+
+bot.onText(/\/planoproverbios/, async (msg) => {
+  if (msg.chat.type !== "private") return;
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  try {
+    let plano = await PlanoModel.findOne({ user_id: userId });
+    if (!plano) {
+      plano = new PlanoModel({ user_id: userId, diaPlano: 1, planoAtivo: true, plano15: true });
+    } else {
+      if (plano.planoAtivo) {
+        return bot.sendMessage(chatId, "Você já possui um plano ativo. Use /cancelarplano para cancelar antes de iniciar outro.");
+      }
+      plano.plano15 = true;
+      plano.planoAtivo = true;
+      plano.diaPlano = 1;
+      plano.messagePlano = [];
+      plano.messagePositionPlano = 0;
+      plano.messageIdPlano = null;
+    }
+    await plano.save();
+    bot.sendMessage(chatId, "✅ Plano <b>30 Dias em Provérbios</b> iniciado!\n\nVocê receberá o devocional diariamente às 21h30. Sabedoria prática de Deus para cada dia.", { parse_mode: "HTML" });
+  } catch (error) {
+    console.error("Erro ao iniciar planoproverbios:", error);
+    bot.sendMessage(chatId, "Ocorreu um erro. Tente novamente.");
+  }
+});
+
+async function sendProverbios(plano) {
+  try {
+    const limite = 1000;
+    const dia = plano.diaPlano;
+    const devocional = planoProverbios[dia].devocional[0];
+    const biblia = planoProverbios[dia].biblia[0];
+    const planoText = `<b>${devocional.titulo}</b>\n\n${devocional.versiculo}\n\n${devocional.texto}\n\n<b>${biblia.referencia}</b>\n\n${biblia.texto}`;
+    const mensagemDividida = planoText.split("\n");
+    let mesnsagemArray = [];
+    let arrayPosition = 0;
+    mesnsagemArray[arrayPosition] = "";
+    let messageInfo;
+    if (planoText.length <= limite) {
+      mesnsagemArray[arrayPosition] = planoText;
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
+    } else {
+      for (const frase of mensagemDividida) {
+        if ((mesnsagemArray[arrayPosition].length + frase.length) <= limite) {
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        } else {
+          mesnsagemArray.push("");
+          arrayPosition++;
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        }
+      }
+      const buttonsPlano = [];
+      if (mesnsagemArray.length > 1) buttonsPlano.push({ text: "➡️", callback_data: "next-planoproverbios" });
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML", reply_markup: { inline_keyboard: [buttonsPlano] } });
+    }
+    plano.messagePositionPlano = 0;
+    plano.messagePlano = mesnsagemArray;
+    plano.messageIdPlano = messageInfo.message_id;
+    plano.diaPlano++;
+    await plano.save();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function handlePlanCompletionProverbios(plano) {
+  await bot.sendMessage(plano.user_id, "Parabéns! 🎉🙏\n\nVocê concluiu o plano <b>30 Dias em Provérbios</b>!\n\nQue a sabedoria de Deus guie seus caminhos. Use /status para ver seus planos concluídos.\n\nEscolha um novo plano com /plano", { parse_mode: "HTML" });
+  await PlanoModel.updateOne({ _id: plano._id }, { $set: { diaPlano: null, messagePositionPlano: 0, messageIdPlano: null, messagePlano: [] } });
+  plano.planoAtivo = false;
+  plano.plano15 = false;
+  plano.planosConcluidos = (plano.planosConcluidos || 0) + 1;
+  await plano.save();
+}
+
+const proverbiosJob = new CronJob("00 30 21 * * *", async () => {
+  try {
+    const activePlanos = await PlanoModel.find({ plano15: true });
+    for (const plano of activePlanos) {
+      const userId = plano.user_id;
+      if (plano.diaPlano > 30) {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await handlePlanCompletionProverbios(plano);
+      } else {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await sendProverbios(plano);
+      }
+    }
+  } catch (err) {
+    console.error("Erro no proverbiosJob:", err);
+  }
+}, null, true, "America/Sao_Paulo");
+proverbiosJob.start();
+
+// ─── PLANO 16: IDENTIDADE EM CRISTO (7 DIAS) ─────────────────────────────────
+
+const planoIdentidadeCristo = require("../plans/identidadecristo.json");
+
+bot.onText(/\/planoidemcristo/, async (msg) => {
+  if (msg.chat.type !== "private") return;
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  try {
+    let plano = await PlanoModel.findOne({ user_id: userId });
+    if (!plano) {
+      plano = new PlanoModel({ user_id: userId, diaPlano: 1, planoAtivo: true, plano16: true });
+    } else {
+      if (plano.planoAtivo) {
+        return bot.sendMessage(chatId, "Você já possui um plano ativo. Use /cancelarplano para cancelar antes de iniciar outro.");
+      }
+      plano.plano16 = true;
+      plano.planoAtivo = true;
+      plano.diaPlano = 1;
+      plano.messagePlano = [];
+      plano.messagePositionPlano = 0;
+      plano.messageIdPlano = null;
+    }
+    await plano.save();
+    bot.sendMessage(chatId, "✅ Plano <b>Identidade em Cristo</b> iniciado!\n\nVocê receberá o devocional diariamente às 21h30. Durante 7 dias, descubra quem você é em Cristo.", { parse_mode: "HTML" });
+  } catch (error) {
+    console.error("Erro ao iniciar planoidemcristo:", error);
+    bot.sendMessage(chatId, "Ocorreu um erro. Tente novamente.");
+  }
+});
+
+async function sendIdentidadeCristo(plano) {
+  try {
+    const limite = 1000;
+    const dia = plano.diaPlano;
+    const devocional = planoIdentidadeCristo[dia].devocional[0];
+    const biblia = planoIdentidadeCristo[dia].biblia[0];
+    const planoText = `<b>${devocional.titulo}</b>\n\n${devocional.versiculo}\n\n${devocional.texto}\n\n<b>${biblia.referencia}</b>\n\n${biblia.texto}`;
+    const mensagemDividida = planoText.split("\n");
+    let mesnsagemArray = [];
+    let arrayPosition = 0;
+    mesnsagemArray[arrayPosition] = "";
+    let messageInfo;
+    if (planoText.length <= limite) {
+      mesnsagemArray[arrayPosition] = planoText;
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
+    } else {
+      for (const frase of mensagemDividida) {
+        if ((mesnsagemArray[arrayPosition].length + frase.length) <= limite) {
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        } else {
+          mesnsagemArray.push("");
+          arrayPosition++;
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        }
+      }
+      const buttonsPlano = [];
+      if (mesnsagemArray.length > 1) buttonsPlano.push({ text: "➡️", callback_data: "next-planoidemcristo" });
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML", reply_markup: { inline_keyboard: [buttonsPlano] } });
+    }
+    plano.messagePositionPlano = 0;
+    plano.messagePlano = mesnsagemArray;
+    plano.messageIdPlano = messageInfo.message_id;
+    plano.diaPlano++;
+    await plano.save();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function handlePlanCompletionIdentidadeCristo(plano) {
+  await bot.sendMessage(plano.user_id, "Parabéns! 🎉🙏\n\nVocê concluiu o plano <b>Identidade em Cristo</b>!\n\nQue você viva cada dia a partir de quem você é em Cristo. Use /status para ver seus planos concluídos.\n\nEscolha um novo plano com /plano", { parse_mode: "HTML" });
+  await PlanoModel.updateOne({ _id: plano._id }, { $set: { diaPlano: null, messagePositionPlano: 0, messageIdPlano: null, messagePlano: [] } });
+  plano.planoAtivo = false;
+  plano.plano16 = false;
+  plano.planosConcluidos = (plano.planosConcluidos || 0) + 1;
+  await plano.save();
+}
+
+const identidadeCristoJob = new CronJob("00 30 21 * * *", async () => {
+  try {
+    const activePlanos = await PlanoModel.find({ plano16: true });
+    for (const plano of activePlanos) {
+      const userId = plano.user_id;
+      if (plano.diaPlano > 7) {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await handlePlanCompletionIdentidadeCristo(plano);
+      } else {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await sendIdentidadeCristo(plano);
+      }
+    }
+  } catch (err) {
+    console.error("Erro no identidadeCristoJob:", err);
+  }
+}, null, true, "America/Sao_Paulo");
+identidadeCristoJob.start();
+
+// ─── PLANO 17: ANSIEDADE E FÉ (7 DIAS) ───────────────────────────────────────
+
+const planoAnsiedadeFe = require("../plans/ansiedadefe.json");
+
+bot.onText(/\/planoansiedade/, async (msg) => {
+  if (msg.chat.type !== "private") return;
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  try {
+    let plano = await PlanoModel.findOne({ user_id: userId });
+    if (!plano) {
+      plano = new PlanoModel({ user_id: userId, diaPlano: 1, planoAtivo: true, plano17: true });
+    } else {
+      if (plano.planoAtivo) {
+        return bot.sendMessage(chatId, "Você já possui um plano ativo. Use /cancelarplano para cancelar antes de iniciar outro.");
+      }
+      plano.plano17 = true;
+      plano.planoAtivo = true;
+      plano.diaPlano = 1;
+      plano.messagePlano = [];
+      plano.messagePositionPlano = 0;
+      plano.messageIdPlano = null;
+    }
+    await plano.save();
+    bot.sendMessage(chatId, "✅ Plano <b>Ansiedade e Fé</b> iniciado!\n\nVocê receberá o devocional diariamente às 21h30. Durante 7 dias, encontre paz e coragem bíblica.", { parse_mode: "HTML" });
+  } catch (error) {
+    console.error("Erro ao iniciar planoansiedade:", error);
+    bot.sendMessage(chatId, "Ocorreu um erro. Tente novamente.");
+  }
+});
+
+async function sendAnsiedadeFe(plano) {
+  try {
+    const limite = 1000;
+    const dia = plano.diaPlano;
+    const devocional = planoAnsiedadeFe[dia].devocional[0];
+    const biblia = planoAnsiedadeFe[dia].biblia[0];
+    const planoText = `<b>${devocional.titulo}</b>\n\n${devocional.versiculo}\n\n${devocional.texto}\n\n<b>${biblia.referencia}</b>\n\n${biblia.texto}`;
+    const mensagemDividida = planoText.split("\n");
+    let mesnsagemArray = [];
+    let arrayPosition = 0;
+    mesnsagemArray[arrayPosition] = "";
+    let messageInfo;
+    if (planoText.length <= limite) {
+      mesnsagemArray[arrayPosition] = planoText;
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
+    } else {
+      for (const frase of mensagemDividida) {
+        if ((mesnsagemArray[arrayPosition].length + frase.length) <= limite) {
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        } else {
+          mesnsagemArray.push("");
+          arrayPosition++;
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        }
+      }
+      const buttonsPlano = [];
+      if (mesnsagemArray.length > 1) buttonsPlano.push({ text: "➡️", callback_data: "next-planoansiedade" });
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML", reply_markup: { inline_keyboard: [buttonsPlano] } });
+    }
+    plano.messagePositionPlano = 0;
+    plano.messagePlano = mesnsagemArray;
+    plano.messageIdPlano = messageInfo.message_id;
+    plano.diaPlano++;
+    await plano.save();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function handlePlanCompletionAnsiedadeFe(plano) {
+  await bot.sendMessage(plano.user_id, "Parabéns! 🎉🙏\n\nVocê concluiu o plano <b>Ansiedade e Fé</b>!\n\nQue a paz de Deus que excede todo entendimento guarde seu coração. Use /status para ver seus planos concluídos.\n\nEscolha um novo plano com /plano", { parse_mode: "HTML" });
+  await PlanoModel.updateOne({ _id: plano._id }, { $set: { diaPlano: null, messagePositionPlano: 0, messageIdPlano: null, messagePlano: [] } });
+  plano.planoAtivo = false;
+  plano.plano17 = false;
+  plano.planosConcluidos = (plano.planosConcluidos || 0) + 1;
+  await plano.save();
+}
+
+const ansiedadeFeJob = new CronJob("00 30 21 * * *", async () => {
+  try {
+    const activePlanos = await PlanoModel.find({ plano17: true });
+    for (const plano of activePlanos) {
+      const userId = plano.user_id;
+      if (plano.diaPlano > 7) {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await handlePlanCompletionAnsiedadeFe(plano);
+      } else {
+        if (plano.messageIdPlano) { try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {} }
+        await sendAnsiedadeFe(plano);
+      }
+    }
+  } catch (err) {
+    console.error("Erro no ansiedadeFeJob:", err);
+  }
+}, null, true, "America/Sao_Paulo");
+ansiedadeFeJob.start();
+
+// ─── CALLBACKS DE PAGINAÇÃO DOS NOVOS PLANOS ─────────────────────────────────
+
+bot.on("callback_query", async (query) => {
+  const data = query.data;
+  const chatId = query.message.chat.id;
+  const messageId = query.message.message_id;
+
+  const planCallbacks = {
+    "next-planosalmos": { find: { plano14: true }, nextKey: "prev-planosalmos" },
+    "next-planoproverbios": { find: { plano15: true }, nextKey: "prev-planoproverbios" },
+    "next-planoidemcristo": { find: { plano16: true }, nextKey: "prev-planoidemcristo" },
+    "next-planoansiedade": { find: { plano17: true }, nextKey: "prev-planoansiedade" },
+  };
+
+  if (planCallbacks[data]) {
+    const plano = await PlanoModel.findOne({ user_id: query.from.id });
+    if (!plano || !plano.messagePlano || plano.messagePlano.length === 0) {
+      return bot.answerCallbackQuery(query.id);
+    }
+    const nextPos = plano.messagePositionPlano + 1;
+    if (nextPos >= plano.messagePlano.length) {
+      return bot.answerCallbackQuery(query.id);
+    }
+    const buttons = [];
+    if (nextPos > 0) buttons.push({ text: "⬅️", callback_data: planCallbacks[data].nextKey });
+    if (nextPos < plano.messagePlano.length - 1) buttons.push({ text: "➡️", callback_data: data });
+    await bot.editMessageText(plano.messagePlano[nextPos], {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [buttons] },
+    });
+    plano.messagePositionPlano = nextPos;
+    await plano.save();
+    return bot.answerCallbackQuery(query.id);
+  }
+});
+
+// ─── ONBOARDING PROGRESSIVO ───────────────────────────────────────────────────
+
+const tips = {
+  1: `🌟 <b>Dica do dia 1</b>\n\nBem-vindo ao Peregrino! Sabia que você pode pesquisar qualquer versículo da Bíblia diretamente em qualquer conversa do Telegram?\n\nDigite em qualquer chat: <code>@operegrino_bot João 3:16</code>\n\nExperimente agora!`,
+  3: `📅 <b>Dica do dia 3</b>\n\nVocê sabia que temos <b>17 planos de leitura bíblica</b>? Eles são enviados todo dia às 21h30 direto aqui no chat.\n\nAlguns destaques:\n• /planoidemcristo — Identidade em Cristo (7d)\n• /planoansiedade — Ansiedade e Fé (7d)\n• /planosalmos — 30 Dias nos Salmos\n\nVeja todos com /plano`,
+  7: `🏅 <b>Dica do dia 7</b>\n\nVocê está há 7 dias no Peregrino! 🎉\n\nSabia que temos um <b>sistema de ranks</b>? Quanto mais dias de estudo, mais você sobe:\nIniciante → Servo → Fiel → Guerreiro → ... → Teológo\n\nVeja seu progresso atual com /status\n\nConfigure também um lembrete de oração com /horariooracao`,
+};
+
+const onboardingJob = new CronJob("00 00 12 * * *", async () => {
+  try {
+    const now = new Date();
+    const users = await UserModel.find({ dataCadastro: { $exists: true } }).lean();
+    for (const user of users) {
+      const diasNaPlataforma = Math.floor((now - new Date(user.dataCadastro)) / (1000 * 60 * 60 * 24));
+      const tipsDiaEnviado = user.tipsDiaEnviado || [];
+      for (const [dia, msg] of Object.entries(tips)) {
+        const diaNum = parseInt(dia);
+        if (diasNaPlataforma >= diaNum && !tipsDiaEnviado.includes(diaNum)) {
+          try {
+            await bot.sendMessage(user.user_id, msg, { parse_mode: "HTML" });
+            await UserModel.updateOne({ user_id: user.user_id }, { $addToSet: { tipsDiaEnviado: diaNum } });
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Erro no onboardingJob:", err);
+  }
+}, null, true, "America/Sao_Paulo");
+onboardingJob.start();
 
 bot.on("polling_error", (error) => {
   console.error(`Erro no bot de polling: ${error}`);
