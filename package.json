@@ -4,7 +4,7 @@
   "description": "bot projetado para propagar o evangelho",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "start": "node src/index.js"
   },
   "repository": {
@@ -26,5 +26,8 @@
     "fs": "^0.0.1-security",
     "mongoose": "^7.6.3",
     "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
   }
 }

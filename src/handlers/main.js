@@ -37,6 +37,7 @@ const chatCommands = [
   { command: 'verson', description: 'Receber versículos bíblicos' },
   { command: 'intercessao', description: 'Envie seu motivo de intercessão' },
   { command: 'status', description: 'Ver os status no bot' },
+  { command: 'cancelarplano', description: 'Cancelar plano de leitura ativo' },
 ];
 bot.setMyCommands(chatCommands, { scope: JSON.stringify({ type: 'all_private_chats' }) });
 
@@ -54,6 +55,35 @@ const adminCommands = [
 
 bot.setMyCommands(adminCommands, { scope: JSON.stringify({ type: 'all_chat_administrators' }) });
 
+function getUserRank(daysActive) {
+  const ranks = [
+    { rank: 'Iniciante', days: 0 },
+    { rank: 'Servo', days: 7 },
+    { rank: 'Fiel', days: 14 },
+    { rank: 'Líder', days: 21 },
+    { rank: 'Guerreiro', days: 30 },
+    { rank: 'Levita', days: 60 },
+    { rank: 'Rei', days: 90 },
+    { rank: 'Pastor', days: 100 },
+    { rank: 'Discípulo', days: 120 },
+    { rank: 'Patriarca', days: 150 },
+    { rank: 'Sacerdote', days: 180 },
+    { rank: 'Evangelista', days: 210 },
+    { rank: 'Bíblico', days: 240 },
+    { rank: 'Peregrino', days: 270 },
+    { rank: 'Missionário', days: 300 },
+    { rank: 'Embaixador de Cristo', days: 400 },
+    { rank: 'Expositor da Palavra', days: 500 },
+    { rank: 'Conhecedor da Verdade', days: 800 },
+    { rank: 'Remido de Deus', days: 900 },
+    { rank: 'Vaso de Honra', days: 1000 },
+    { rank: 'Teológo', days: 1500 },
+  ];
+  for (let i = ranks.length - 1; i >= 0; i--) {
+    if (daysActive >= ranks[i].days) return ranks[i].rank;
+  }
+  return 'Iniciante';
+}
 
 bot.on("message", async (msg) => {
   try {
@@ -143,6 +173,7 @@ bot.on("new_chat_members", async (msg) => {
           (member) => member.id === botUser.id
         );
 
+        let chatusername;
         if (msg.chat.username) {
           chatusername = `@${msg.chat.username}`;
         } else {
@@ -225,7 +256,7 @@ bot.on("new_chat_members", async (msg) => {
 
 bot.on("left_chat_member", async (msg) => {
   const botUser = await bot.getMe();
-  if (msg.left_chat_member.id === botUser.id && msg.chat.id === groupId) {
+  if (msg.left_chat_member.id === botUser.id && String(msg.chat.id) === String(groupId)) {
     console.log("Bot left the group!");
 
     try {
@@ -538,7 +569,7 @@ bot.onText(/\/ban/, async (message) => {
     return;
   }
 
-  if (!(await is_dev(user_id))) {
+  if (!(await is_dev(userId))) {
     await bot.sendMessage(
       message.chat.id,
       "Você não está autorizado a executar este comando."
@@ -553,7 +584,7 @@ bot.onText(/\/ban/, async (message) => {
     return;
   }
 
-  if (chat.is_ban) {
+  if (chat.isBlocked) {
     await bot.sendMessage(
       message.chat.id,
       `Grupo ${chat.chatName} já foi banido.`
@@ -580,8 +611,8 @@ bot.onText(/\/ban/, async (message) => {
     }
   );
 
-  await ChatModel.updateOne({ chatId: chatId }, { $set: { is_ban: true } });
-  await bot.sendMessage(chatId, `Toguro sairá do grupo e não pode ficar!!`);
+  await ChatModel.updateOne({ chatId: chatId }, { $set: { isBlocked: true } });
+  await bot.sendMessage(chatId, `O bot foi removido do grupo.`);
   await bot.leaveChat(chatId);
 
   await bot.sendMessage(
@@ -620,7 +651,7 @@ bot.onText(/\/unban/, async (message) => {
     return;
   }
 
-  if (!chat.is_ban) {
+  if (!chat.isBlocked) {
     await bot.sendMessage(
       message.chat.id,
       `O grupo ${chat.chatName} já está desbanido ou nunca foi banido.`
@@ -647,7 +678,7 @@ bot.onText(/\/unban/, async (message) => {
     }
   );
 
-  await ChatModel.updateOne({ chatId: chatId }, { $set: { is_ban: false } });
+  await ChatModel.updateOne({ chatId: chatId }, { $set: { isBlocked: false } });
   await bot.sendMessage(
     message.chat.id,
     `Grupo ${chat.chatName} foi desbanido.`
@@ -674,7 +705,7 @@ bot.onText(/\/banned/, async (message) => {
     return;
   }
 
-  const bannedChats = await ChatModel.find({ is_ban: true });
+  const bannedChats = await ChatModel.find({ isBlocked: true });
 
   if (bannedChats.length === 0) {
     await bot.sendMessage(
@@ -1773,6 +1804,37 @@ bot.on("callback_query", async (query) => {
         await bot.editMessageText(messagePlano[plano.messagePositionPlano], messageOptions);
       }
     }
+    else if (comando[1] == "planodv") {
+      const chatId = query.message.chat.id;
+      const plano = await PlanoModel.findOne({ user_id: userId });
+      const messageIdPlano = query.message.message_id;
+      let messagePlano = plano.messagePlano;
+
+      if (plano && plano.messageIdPlano === messageIdPlano) {
+        if (comando[0] === "prev" && plano.messagePositionPlano > 0) {
+          plano.messagePositionPlano -= 1;
+        } else if (comando[0] === "next" && plano.messagePositionPlano < messagePlano.length) {
+          plano.messagePositionPlano++;
+        }
+        await plano.save();
+
+        const buttonsPlano = [];
+        if (plano.messagePositionPlano > 0) {
+          buttonsPlano.push({ text: "⬅️", callback_data: "prev-planodv" });
+        }
+        if (messagePlano.length > plano.messagePositionPlano + 1) {
+          buttonsPlano.push({ text: "➡️", callback_data: "next-planodv" });
+        }
+
+        const messageOptions = {
+          chat_id: chatId,
+          message_id: messageIdPlano,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: [buttonsPlano] },
+        };
+        await bot.editMessageText(messagePlano[plano.messagePositionPlano], messageOptions);
+      }
+    }
     else if (comando[1] == "intercessao") {
       const chatId = query.message.chat.id;
       const userId = query.from.id;
@@ -2268,44 +2330,6 @@ bot.on("callback_query", async (query) => {
       translation,
     } = user;
 
-    const getUserRank = (daysActive) => {
-      const ranks = [
-        { rank: 'Iniciante', days: 0 },
-        { rank: 'Servo', days: 7 },
-        { rank: 'Fiel', days: 14 },
-        { rank: 'Líder', days: 21 },
-        { rank: 'Guerreiro', days: 30 },
-        { rank: 'Levita', days: 60 },
-        { rank: 'Rei', days: 90 },
-        { rank: 'Pastor', days: 100 },
-        { rank: 'Discípulo', days: 120 },
-        { rank: 'Patriarca', days: 150 },
-        { rank: 'Sacerdote', days: 180 },
-        { rank: 'Evangelista', days: 210 },
-        { rank: 'Bíblico', days: 240 },
-        { rank: 'Peregrino', days: 270 },
-        { rank: 'Missionário', days: 300 },
-        { rank: 'Embaixador de Cristo', days: 400 },
-        { rank: 'Expositor da Palavra', days: 500 },
-        { rank: 'Conhecedor da Verdade', days: 800 },
-        { rank: 'Remido de Deus', days: 900 },
-        { rank: 'Vaso de Honra', days: 1000 },
-        { rank: 'Teológo', days: 1500 },
-
-      ];
-
-      let userRank = 'Iniciante';
-
-      for (let i = ranks.length - 1; i >= 0; i--) {
-        if (daysActive >= ranks[i].days) {
-          userRank = ranks[i].rank;
-          break;
-        }
-      }
-
-      return userRank;
-    };
-
     const userRank = getUserRank(diasdeestudo);
 
     let statusMessage = `<b>Informações do usuário:</b>\n\n`;
@@ -2593,7 +2617,8 @@ async function verificarHorarioOracao() {
   const currentMinute = now.getMinutes();
 
   try {
-    const users = await UserModel.find({ horariodeoracao: `${currentHour}:${currentMinute}` }).exec();
+    const paddedMinute = String(currentMinute).padStart(2, '0');
+    const users = await UserModel.find({ horariodeoracao: `${currentHour}:${paddedMinute}` }).exec();
 
     users.forEach((user) => {
       const chatId = user.user_id;
@@ -2763,15 +2788,25 @@ bot.onText(/\/topdias/, async (msg) => {
 
 bot.onText(/\/topplanos/, async (msg) => {
   try {
-    const usuarios = await PlanoModel.find()
+    const topPlanos = await PlanoModel.find({ planosConcluidos: { $gt: 0 } })
       .sort({ planosConcluidos: -1 })
       .limit(5)
-      .select('firstname planosConcluidos');
+      .select('user_id planosConcluidos');
+
+    const userIds = topPlanos.map(p => p.user_id);
+    const users = await UserModel.find({ user_id: { $in: userIds } }).select('user_id firstname');
+    const userMap = {};
+    users.forEach(u => { userMap[u.user_id] = u.firstname; });
 
     let message = '<b>Ranking dos 5 maiores usuários com mais planos concluídos:</b>\n\n';
-    usuarios.forEach((usuario, index) => {
-      message += `<code>#${index + 1}</code> <b>${usuario.firstname}</b> - <code>${usuario.planosConcluidos} Planos Concluídos</code>\n`;
+    topPlanos.forEach((plano, index) => {
+      const nome = userMap[plano.user_id] || 'Usuário';
+      message += `<code>#${index + 1}</code> <b>${nome}</b> - <code>${plano.planosConcluidos} Planos Concluídos</code>\n`;
     });
+
+    if (topPlanos.length === 0) {
+      message += '<i>Nenhum plano concluído ainda.</i>';
+    }
 
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
   } catch (error) {
@@ -2848,44 +2883,6 @@ bot.onText(/\/status/, async (msg) => {
       translation,
     } = user;
 
-    const getUserRank = (daysActive) => {
-      const ranks = [
-        { rank: 'Iniciante', days: 0 },
-        { rank: 'Servo', days: 7 },
-        { rank: 'Fiel', days: 14 },
-        { rank: 'Líder', days: 21 },
-        { rank: 'Guerreiro', days: 30 },
-        { rank: 'Levita', days: 60 },
-        { rank: 'Rei', days: 90 },
-        { rank: 'Pastor', days: 100 },
-        { rank: 'Discípulo', days: 120 },
-        { rank: 'Patriarca', days: 150 },
-        { rank: 'Sacerdote', days: 180 },
-        { rank: 'Evangelista', days: 210 },
-        { rank: 'Bíblico', days: 240 },
-        { rank: 'Peregrino', days: 270 },
-        { rank: 'Missionário', days: 300 },
-        { rank: 'Embaixador de Cristo', days: 400 },
-        { rank: 'Expositor da Palavra', days: 500 },
-        { rank: 'Conhecedor da Verdade', days: 800 },
-        { rank: 'Remido de Deus', days: 900 },
-        { rank: 'Vaso de Honra', days: 1000 },
-        { rank: 'Teológo', days: 1500 },
-
-      ];
-
-      let userRank = 'Iniciante';
-
-      for (let i = ranks.length - 1; i >= 0; i--) {
-        if (daysActive >= ranks[i].days) {
-          userRank = ranks[i].rank;
-          break;
-        }
-      }
-
-      return userRank;
-    };
-
     const userRank = getUserRank(diasdeestudo);
 
     let statusMessage = `<b>Informações do usuário:</b>\n\n`;
@@ -2932,8 +2929,48 @@ bot.onText(/\/status/, async (msg) => {
 }
 );
 
-// Pesquisa do bíblia via comando
+// CANCELAR PLANO ATIVO
 
+bot.onText(/\/cancelarplano/, async (msg) => {
+  if (msg.chat.type !== "private") {
+    return;
+  }
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+
+  try {
+    const plano = await PlanoModel.findOne({ user_id: userId, planoAtivo: true });
+
+    if (!plano) {
+      bot.sendMessage(chatId, "Você não possui nenhum plano ativo no momento.\n\nUse /plano para escolher um plano.");
+      return;
+    }
+
+    const planoFlags = {};
+    for (let i = 1; i <= 30; i++) {
+      planoFlags[`plano${i}`] = false;
+    }
+
+    await PlanoModel.updateOne(
+      { user_id: userId },
+      {
+        $set: {
+          planoAtivo: false,
+          diaPlano: null,
+          messagePlano: [],
+          messagePositionPlano: 0,
+          messageIdPlano: null,
+          ...planoFlags,
+        },
+      }
+    );
+
+    bot.sendMessage(chatId, "✅ Seu plano foi cancelado com sucesso.\n\nUse /plano para escolher um novo plano.");
+  } catch (error) {
+    console.error("Erro ao cancelar plano:", error);
+    bot.sendMessage(chatId, "Ocorreu um erro ao cancelar seu plano. Tente novamente.");
+  }
+});
 
 // consulta da bíblia inline
 
@@ -3094,11 +3131,13 @@ bot.on('inline_query', async (query) => {
                 type: 'article',
                 id: query.id,
                 title: caption,
-                message_text: `${text}\n\n<b>${getSmallSuperscriptNumber(
-                  verseNumber
-                )}</b><i>${verseText}</i>`,
+                input_message_content: {
+                  message_text: `${text}\n\n<b>${getSmallSuperscriptNumber(
+                    verseNumber
+                  )}</b><i>${verseText}</i>`,
+                  parse_mode: 'HTML',
+                },
                 description: verseText.slice(0, 100),
-                parse_mode: 'HTML',
                 thumbnail_url: BibleUrl,
               };
 
@@ -3229,10 +3268,10 @@ bot.onText(/\/versoff/, async (msg) => {
     );
     return;
   }
-  if (user.diariavers) {
+  if (!user.diariavers) {
     bot.sendMessage(
       chatId,
-      "Você já desativou a função de receber versículos bíblicos diários"
+      "Você já desativou a função de receber versículos bíblicos diários."
     );
     return;
   }
@@ -3864,7 +3903,7 @@ async function sendDailyText(userId, text, options) {
         plano.messagePlano = messageText;
         plano.messagePositionPlano = position;
 
-        const messagePlano = await bot.sendMessage(userId, messageText, { parse_mode: "HTML" });
+        const messagePlano = await bot.sendMessage(plano.user_id, messageText, { parse_mode: "HTML" });
         plano.messageIdPlano = messagePlano.message_id;
         await plano.save();
       }
@@ -4034,7 +4073,7 @@ async function sendSabedoriaDivina(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -4051,7 +4090,7 @@ async function sendSabedoriaDivina(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -4466,7 +4505,7 @@ async function sendOracoesPerigosas(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -4483,7 +4522,7 @@ async function sendOracoesPerigosas(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -4664,7 +4703,7 @@ async function sendBibliaParaTodos(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -4681,7 +4720,7 @@ async function sendBibliaParaTodos(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -4863,7 +4902,7 @@ async function sendRestaurandoCasamentos(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -4880,7 +4919,7 @@ async function sendRestaurandoCasamentos(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -5060,7 +5099,7 @@ async function sendLinguagemDoAmor(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -5077,7 +5116,7 @@ async function sendLinguagemDoAmor(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -5258,7 +5297,7 @@ async function sendNamoroEraContemporanea(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -5275,7 +5314,7 @@ async function sendNamoroEraContemporanea(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -5609,7 +5648,7 @@ async function sendNamoroPretoBranco(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -5626,7 +5665,7 @@ async function sendNamoroPretoBranco(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -5807,7 +5846,7 @@ async function sendCasamento(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -5824,7 +5863,7 @@ async function sendCasamento(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -6004,7 +6043,7 @@ async function sendDivorcioACura(userId, texto, options) {
         let messageInfo;
         if (planoText.length <= limite) {
           mesnsagemArray[arrayPosition] = planoText
-          messageInfo = await bot.sendMessage(userId, mesnsagemArray[0], { parse_mode: "HTML" });
+          messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
         }
         else {
 
@@ -6021,7 +6060,7 @@ async function sendDivorcioACura(userId, texto, options) {
           }
 
           messageInfo = await bot.sendMessage(
-            userId,
+            plano.user_id,
             mesnsagemArray[0],
             messageOptions
           );
@@ -6094,6 +6133,144 @@ const DivorcioJob = new CronJob("00 30 21 * * *", async () => {
 }, null, true, "America/Sao_Paulo");
 
 DivorcioJob.start();
+
+// DEVOCIONAIS - CRESCENDO NA FÉ (6 DIAS)
+
+const planoDevocionais = require("../plans/devocionais.json");
+
+bot.onText(/\/planodevocionais/, async (msg) => {
+  if (msg.chat.type !== "private") {
+    return;
+  }
+  const userId = msg.chat.id;
+  const photoPath = 'src/image/Jesus.jpg';
+  const caption = '<b>Crescendo na Fé — Devocionais (6 Dias)</b>\n\nUm plano devocional de 6 dias para aprofundar sua caminhada com Deus. Cada dia traz uma reflexão bíblica sobre graça, fé, paz, amor, transformação e propósito. Ideal para quem deseja começar ou aprofundar o hábito da leitura devocional.\n\nCategoria: Crescimento Espiritual | Duração: 6 dias';
+
+  try {
+    const existingPlano = await PlanoModel.findOne({ user_id: userId, planoAtivo: true });
+    if (existingPlano) {
+      bot.sendMessage(userId, "Você já possui um plano ativo.\n\nUse /cancelarplano para cancelar o plano atual antes de iniciar um novo.");
+      return;
+    }
+
+    const existingInactivePlano = await PlanoModel.findOne({ user_id: userId, planoAtivo: false });
+    if (existingInactivePlano) {
+      await PlanoModel.updateMany(
+        { user_id: userId, planoAtivo: false },
+        { $set: { planoAtivo: true, plano13: true, diaPlano: 1, messagePositionPlano: 0 } }
+      );
+    } else {
+      const newPlano = new PlanoModel({
+        user_id: userId,
+        planoAtivo: true,
+        plano13: true,
+        diaPlano: 1,
+        messagePositionPlano: 0,
+        messageIdPlano: null,
+        messagePlano: "",
+        planosConcluidos: 0,
+      });
+      await newPlano.save();
+    }
+
+    await bot.sendPhoto(userId, photoPath, { caption, parse_mode: 'HTML' });
+  } catch (error) {
+    console.error(error);
+    bot.sendMessage(userId, "Ocorreu um erro ao criar o plano. Por favor, tente novamente mais tarde.");
+  }
+});
+
+async function sendDevocionais(plano) {
+  try {
+    const limite = 1000;
+    const dia = plano.diaPlano;
+
+    const devocional = planoDevocionais[dia].devocional[0];
+    const biblia = planoDevocionais[dia].biblia[0];
+    const planoText = `<b>${devocional.titulo}</b>\n\n${devocional.versiculo}\n\n${devocional.texto}\n\n<b>${biblia.referencia}</b>\n\n${biblia.texto}`;
+
+    const mensagemDividida = planoText.split("\n");
+    let mesnsagemArray = [];
+    let arrayPosition = 0;
+    mesnsagemArray[arrayPosition] = "";
+
+    let messageInfo;
+    if (planoText.length <= limite) {
+      mesnsagemArray[arrayPosition] = planoText;
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], { parse_mode: "HTML" });
+    } else {
+      for (let posicaoTexto = 0; posicaoTexto < mensagemDividida.length; posicaoTexto++) {
+        let frase = mensagemDividida[posicaoTexto];
+        if ((mesnsagemArray[arrayPosition].length + frase.length) <= limite) {
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        } else {
+          mesnsagemArray.push("");
+          arrayPosition++;
+          mesnsagemArray[arrayPosition] += `${frase}\n`;
+        }
+      }
+
+      const buttonsPlano = [];
+      if (mesnsagemArray.length > 1) {
+        buttonsPlano.push({ text: "➡️", callback_data: "next-planodv" });
+      }
+      messageInfo = await bot.sendMessage(plano.user_id, mesnsagemArray[0], {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: [buttonsPlano] },
+      });
+    }
+
+    plano.messagePositionPlano = 0;
+    plano.messagePlano = mesnsagemArray;
+    plano.messageIdPlano = messageInfo.message_id;
+    plano.diaPlano++;
+    await plano.save();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function handlePlanCompletionDevocionais(plano) {
+  const userId = plano.user_id;
+  await bot.sendMessage(userId, "Parabéns! 🎉🙏\n\nVocê concluiu o plano devocional 'Crescendo na Fé'!\n\nQue esses 6 dias de reflexão tenham fortalecido sua caminhada com Deus. Para ver seus planos concluídos use /status\n\nEscolha um novo plano com /plano");
+  await PlanoModel.updateOne({ _id: plano._id }, {
+    $set: { diaPlano: null, messagePositionPlano: 0, messageIdPlano: null, messagePlano: [] }
+  });
+  plano.planoAtivo = false;
+  plano.plano13 = false;
+  plano.planosConcluidos = (plano.planosConcluidos || 0) + 1;
+  await plano.save();
+}
+
+const devocionaisJob = new CronJob("00 30 21 * * *", async () => {
+  try {
+    const activePlanos = await PlanoModel.find({ plano13: true });
+    for (const plano of activePlanos) {
+      const userId = plano.user_id;
+
+      if (plano.diaPlano > 6) {
+        if (plano.messageIdPlano) {
+          try { await bot.deleteMessage(userId, plano.messageIdPlano); } catch (_) {}
+        }
+        await handlePlanCompletionDevocionais(plano);
+      } else {
+        if (plano.messageIdPlano) {
+          try {
+            await bot.deleteMessage(userId, plano.messageIdPlano);
+          } catch (error) {
+            console.log(`Erro ao excluir mensagem do usuário ${userId}: ${error.message}`);
+          }
+        }
+        await sendDevocionais(plano);
+        console.log(`Devocional enviado para o usuário ${userId} — dia ${plano.diaPlano - 1}`);
+      }
+    }
+  } catch (err) {
+    console.error("Erro no devocionaisJob:", err);
+  }
+}, null, true, "America/Sao_Paulo");
+
+devocionaisJob.start();
 
 bot.on("polling_error", (error) => {
   console.error(`Erro no bot de polling: ${error}`);

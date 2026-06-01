@@ -2,7 +2,7 @@ const { Schema } = require("mongoose");
 
 const planosSchema = new Schema({
   user_id: { type: Number, required: false, unique: true },
-  firstname: { type: String, required: true },
+  firstname: { type: String, required: false },
   planoAtivo: { type: Boolean, required: false, default: false },
   diaPlano: { type: Number, required: false, min: 1, max: 81 },
   versiculoPlano: { type: Number, required: false, min: 0, max: 9000 },
