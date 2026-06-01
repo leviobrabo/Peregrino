@@ -1,5 +1,5 @@
 const { bot } = require("../bot");
-const { ChatModel, UserModel, PlanoModel } = require("../database");
+const { ChatModel, UserModel, PlanoModel, StatsModel } = require("../database");
 const CronJob = require("cron").CronJob;
 const fs = require('fs');
 
@@ -85,6 +85,17 @@ function getUserRank(daysActive) {
   return 'Iniciante';
 }
 
+async function trackCommand(commandName) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await StatsModel.findOneAndUpdate(
+      { date: today, command: commandName },
+      { $inc: { count: 1 } },
+      { upsert: true }
+    );
+  } catch (_) {}
+}
+
 bot.on("message", async (msg) => {
   try {
     if (
@@ -92,17 +103,17 @@ bot.on("message", async (msg) => {
       msg.entities &&
       msg.entities[0].type === "bot_command"
     ) {
-      const existingUser = await UserModel.findOne({
-        user_id: msg.from.id,
-      });
+      const now = new Date();
+      const commandText = msg.text ? msg.text.split(" ")[0].replace("/", "").split("@")[0] : "unknown";
+
+      const existingUser = await UserModel.findOne({ user_id: msg.from.id });
       if (existingUser) {
+        existingUser.lastActive = now;
+        existingUser.commandCount = (existingUser.commandCount || 0) + 1;
         if (!existingUser.receivedPlusOne) {
           existingUser.receivedPlusOne = true;
-          await existingUser.save();
-          return;
-        } else {
-          // console.log('Usuário já recebeu o plus one');
         }
+        await existingUser.save();
       } else {
         const user = new UserModel({
           user_id: msg.from.id,
@@ -117,23 +128,21 @@ bot.on("message", async (msg) => {
           diasdeestudo: 0,
           translation: "acf",
           receivedPlusOne: false,
+          lastActive: now,
+          commandCount: 1,
+          dataCadastro: now,
         });
-
         await user.save();
         console.log(`Usuário ${msg.from.id} salvo no banco de dados.`);
 
-        const message = `#${nameBot} #New_User
-        <b>User:</b> <a href="tg://user?id=${user.user_id}">${user.firstname}</a>
-        <b>ID:</b> <code>${user.user_id}</code>
-        <b>Username:</b> ${user.username ? `@${user.username}` : "Não informado"
-          }`;
+        const message = `#${nameBot} #New_User\n        <b>User:</b> <a href="tg://user?id=${user.user_id}">${user.firstname}</a>\n        <b>ID:</b> <code>${user.user_id}</code>\n        <b>Username:</b> ${user.username ? `@${user.username}` : "Não informado"}`;
         bot.sendMessage(groupId, message, { parse_mode: "HTML", reply_to_message_id: 38573 });
       }
+
+      trackCommand(commandText);
     }
   } catch (error) {
-    console.error(
-      `Erro ao salvar o usuário ${msg.from.id} no banco de dados: ${error.message}`
-    );
+    console.error(`Erro ao salvar o usuário ${msg.from.id} no banco de dados: ${error.message}`);
   }
 });
 
@@ -382,11 +391,137 @@ bot.onText(/^\/grupos/, async (message) => {
 
 bot.onText(/\/stats/, async (msg) => {
   const chatId = msg.chat.id;
-  const numUsers = await UserModel.countDocuments();
-  const numChats = await ChatModel.countDocuments();
+  const userId = msg.from.id;
+  if (!(await is_dev(userId))) return;
 
-  const message = `\n──❑ 「 Bot Stats 」 ❑──\n\n ☆ ${numUsers} usuários\n ☆ ${numChats} chats`;
-  bot.sendMessage(chatId, message);
+  const now = new Date();
+  const startOfToday  = new Date(now); startOfToday.setHours(0,0,0,0);
+  const ago7  = new Date(now); ago7.setDate(now.getDate() - 7);
+  const ago30 = new Date(now); ago30.setDate(now.getDate() - 30);
+  const ago1d = new Date(now); ago1d.setDate(now.getDate() - 1);
+
+  const [
+    totalUsers,
+    totalGroups,
+    dauCount,
+    wauCount,
+    mauCount,
+    silentCount,
+    activePlans,
+    totalPlanos,
+  ] = await Promise.all([
+    UserModel.countDocuments(),
+    ChatModel.countDocuments(),
+    UserModel.countDocuments({ lastActive: { $gte: startOfToday } }),
+    UserModel.countDocuments({ lastActive: { $gte: ago7 } }),
+    UserModel.countDocuments({ lastActive: { $gte: ago30 } }),
+    UserModel.countDocuments({ lastActive: { $lt: ago30 } }),
+    PlanoModel.countDocuments({ planoAtivo: true }),
+    PlanoModel.countDocuments(),
+  ]);
+
+  // Retenção D1, D7, D30 — cohort dos que entraram N dias atrás
+  const cohortD1Start = new Date(now); cohortD1Start.setDate(now.getDate() - 2); cohortD1Start.setHours(0,0,0,0);
+  const cohortD1End   = new Date(now); cohortD1End.setDate(now.getDate() - 1);   cohortD1End.setHours(23,59,59,999);
+  const cohortD7Start = new Date(now); cohortD7Start.setDate(now.getDate() - 8); cohortD7Start.setHours(0,0,0,0);
+  const cohortD7End   = new Date(now); cohortD7End.setDate(now.getDate() - 7);   cohortD7End.setHours(23,59,59,999);
+  const cohortD30Start = new Date(now); cohortD30Start.setDate(now.getDate() - 31); cohortD30Start.setHours(0,0,0,0);
+  const cohortD30End   = new Date(now); cohortD30End.setDate(now.getDate() - 30);   cohortD30End.setHours(23,59,59,999);
+
+  const [baseD1, retD1, baseD7, retD7, baseD30, retD30] = await Promise.all([
+    UserModel.countDocuments({ dataCadastro: { $gte: cohortD1Start, $lte: cohortD1End } }),
+    UserModel.countDocuments({ dataCadastro: { $gte: cohortD1Start, $lte: cohortD1End }, lastActive: { $gte: startOfToday } }),
+    UserModel.countDocuments({ dataCadastro: { $gte: cohortD7Start, $lte: cohortD7End } }),
+    UserModel.countDocuments({ dataCadastro: { $gte: cohortD7Start, $lte: cohortD7End }, lastActive: { $gte: ago7 } }),
+    UserModel.countDocuments({ dataCadastro: { $gte: cohortD30Start, $lte: cohortD30End } }),
+    UserModel.countDocuments({ dataCadastro: { $gte: cohortD30Start, $lte: cohortD30End }, lastActive: { $gte: ago30 } }),
+  ]);
+
+  const pct = (n, d) => d > 0 ? `${Math.round((n / d) * 100)}%` : 'N/A';
+
+  // Top referrals
+  const referrals = await UserModel.aggregate([
+    { $match: { referral: { $exists: true, $ne: null } } },
+    { $group: { _id: "$referral", count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: 5 },
+  ]);
+
+  // Top comandos hoje
+  const today = now.toISOString().slice(0, 10);
+  const topCmds = await StatsModel.find({ date: today }).sort({ count: -1 }).limit(8).lean();
+
+  // Top comandos geral (últimos 7 dias)
+  const topCmdsWeek = await StatsModel.aggregate([
+    { $match: { date: { $gte: ago7.toISOString().slice(0, 10) } } },
+    { $group: { _id: "$command", total: { $sum: "$count" } } },
+    { $sort: { total: -1 } },
+    { $limit: 8 },
+  ]);
+
+  // Planos ativos por tipo
+  const planoFlags = ['plano1','plano2','plano3','plano4','plano5','plano6','plano7','plano8','plano9','plano10','plano11','plano12','plano13','plano14','plano15','plano16','plano17'];
+  const planoNames = ['Transformado','Sabedoria','NT 80d','Orações P.','Bíblia TD','Casamento R.','Linguagem Amor','Namoro Ctmp','Apocalipse','Namoro PB','Casamento','Divórcio→Cura','Devocionais','Salmos 30d','Provérbios 30d','Identidade','Ansiedade&Fé'];
+  const planoCountsRaw = await Promise.all(planoFlags.map(f => PlanoModel.countDocuments({ [f]: true })));
+  const planoLines = planoCountsRaw
+    .map((c, i) => c > 0 ? `  ${planoNames[i]}: ${c}` : null)
+    .filter(Boolean)
+    .join('\n');
+
+  // VIPs (top 5 por commandCount)
+  const vips = await UserModel.find({ commandCount: { $gt: 0 } }).sort({ commandCount: -1 }).limit(5).select('firstname commandCount user_id').lean();
+
+  // Montar mensagem
+  const wauPct = pct(wauCount, totalUsers);
+  let msg2 = `<b>📊 Peregrino — Analytics</b>\n`;
+  msg2 += `<code>${now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</code>\n\n`;
+
+  msg2 += `<b>👥 Usuários</b>\n`;
+  msg2 += `Total: <b>${totalUsers}</b> | Grupos: <b>${totalGroups}</b>\n`;
+  msg2 += `Silenciosos (&gt;30d): <b>${silentCount}</b> (${pct(silentCount, totalUsers)})\n\n`;
+
+  msg2 += `<b>📈 Atividade</b>\n`;
+  msg2 += `DAU: <b>${dauCount}</b> (${pct(dauCount, totalUsers)})\n`;
+  msg2 += `WAU: <b>${wauCount}</b> (${pct(wauCount, totalUsers)})\n`;
+  msg2 += `MAU: <b>${mauCount}</b> (${pct(mauCount, totalUsers)})\n`;
+  msg2 += `WAU/Total: <b>${wauPct}</b>\n\n`;
+
+  msg2 += `<b>🔄 Retenção</b>\n`;
+  msg2 += `D1: ${retD1}/${baseD1} → <b>${pct(retD1, baseD1)}</b>\n`;
+  msg2 += `D7: ${retD7}/${baseD7} → <b>${pct(retD7, baseD7)}</b>\n`;
+  msg2 += `D30: ${retD30}/${baseD30} → <b>${pct(retD30, baseD30)}</b>\n\n`;
+
+  msg2 += `<b>📅 Planos</b>\n`;
+  msg2 += `Ativos: <b>${activePlans}</b> / Total registros: ${totalPlanos}\n`;
+  if (planoLines) msg2 += planoLines + '\n';
+  msg2 += '\n';
+
+  if (referrals.length > 0) {
+    msg2 += `<b>🔗 Top Origens</b>\n`;
+    referrals.forEach(r => { msg2 += `  ${r._id}: ${r.count}\n`; });
+    msg2 += '\n';
+  }
+
+  if (topCmds.length > 0) {
+    msg2 += `<b>⚡ Comandos hoje</b>\n`;
+    topCmds.forEach(c => { msg2 += `  /${c.command}: ${c.count}\n`; });
+    msg2 += '\n';
+  }
+
+  if (topCmdsWeek.length > 0) {
+    msg2 += `<b>📌 Comandos (7d)</b>\n`;
+    topCmdsWeek.forEach(c => { msg2 += `  /${c._id}: ${c.total}\n`; });
+    msg2 += '\n';
+  }
+
+  if (vips.length > 0) {
+    msg2 += `<b>🏆 VIPs (mais ativos)</b>\n`;
+    vips.forEach((v, i) => {
+      msg2 += `  ${i + 1}. <a href="tg://user?id=${v.user_id}">${v.firstname}</a>: ${v.commandCount} cmds\n`;
+    });
+  }
+
+  bot.sendMessage(chatId, msg2, { parse_mode: "HTML", disable_web_page_preview: true });
 });
 
 function timeFormatter(seconds) {
@@ -1199,6 +1334,19 @@ infotraduCommand
 
 bot.onText(/^\/start$/, (message) => {
   startCommand(bot, message);
+});
+
+bot.onText(/^\/start (.+)$/, async (message, match) => {
+  startCommand(bot, message);
+  const ref = match[1].trim();
+  if (ref) {
+    try {
+      await UserModel.updateOne(
+        { user_id: message.from.id, referral: { $exists: false } },
+        { $set: { referral: ref } }
+      );
+    } catch (_) {}
+  }
 });
 
 // help
@@ -3421,7 +3569,8 @@ const userVersJob = new CronJob(
       cutoff.setDate(cutoff.getDate() - 45);
       const users = await UserModel.find({ diariavers: true });
       for (const user of users) {
-        if (user.last_interaction) {
+        if (user.lastActive && user.lastActive < cutoff) continue;
+        if (!user.lastActive && user.last_interaction) {
           const lastDate = new Date(user.last_interaction);
           if (lastDate < cutoff) continue;
         }

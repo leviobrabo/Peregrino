@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 const ChatSchema = require("./models/groups");
 const userSchema = require("./models/users");
 const planosSchema = require("./models/planos");
+const statsSchema = require("./models/stats");
 
 dotenv.config();
 
@@ -14,6 +15,6 @@ mongoose.connect(process.env.DB_STRING, {
 const ChatModel = mongoose.model("Chat", ChatSchema);
 const UserModel = mongoose.model("User", userSchema);
 const PlanoModel = mongoose.model("Plano", planosSchema);
+const StatsModel = mongoose.model("Stats", statsSchema);
 
-
-module.exports = { ChatModel, UserModel, PlanoModel };
+module.exports = { ChatModel, UserModel, PlanoModel, StatsModel };
